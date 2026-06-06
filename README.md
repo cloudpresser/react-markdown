@@ -1,4 +1,4 @@
-# Streamed Markdown Interview Exercise
+# Streamed Markdown In React
 
 This repo is a reference playground for discussing markdown stream rendering in React.
 
@@ -8,217 +8,111 @@ Live app:
 Repo:
 - GitHub: https://github.com/cloudpresser/react-markdown
 
-## What This Playground Covers
+## Decision Tree
 
-The app lets you compare two approaches side by side:
+Start with the renderer decision first.
 
-1. `react-markdown`
-2. `streamdown`
+### Choose `streamdown` when:
 
-It also includes controls for the main tradeoffs that usually come up in this exercise:
+- the project already uses Tailwind
+- streamed AI output is a first-class product feature
+- you want more built-in handling for incomplete markdown and AI-specific rendering concerns
+- you are comfortable with a more opinionated renderer
 
-- static vs streaming rendering
-- chunk size, speed, and variance
-- `react-markdown` with and without `remend`
-- Mermaid fallback behavior during partial streams
+Read next:
+- `docs/streamdown.md`
 
-## The Core Problem
+### Choose `react-markdown` when:
 
-Rendering markdown is easy when the full document is available.
+- you want semantic HTML with minimal renderer opinionation
+- you want styling independence from Tailwind
+- you want to control the streaming and fallback strategy yourself
+- you want the simplest baseline and are willing to layer behavior on top
 
-Rendering markdown while text is still streaming is harder because the input is often syntactically incomplete:
+Read next:
+- `docs/react-markdown.md`
 
-- unclosed `**bold`
-- half-written links like `[docs](`
+## Core Concerns
+
+These are likely concerns when dealing with streaming markdown rendering.
+
+### 1. Incomplete Stream Handling
+
+Streaming markdown is often syntactically incomplete:
+
+- unclosed emphasis
+- partial links
 - unterminated code fences
-- Mermaid blocks that are not complete yet
+- incomplete Mermaid blocks
 
-That creates a tension between:
+This is the main reason a plain markdown renderer can feel rough under streamed input.
 
-- semantic correctness
-- streaming UX
-- implementation complexity
-- styling control
+### 2. Project Compatibility
 
-## Main Alternatives
+Renderer fit depends heavily on the existing app:
 
-### 1. Plain `react-markdown`
+- Is Tailwind already present?
+- Is styling tightly controlled already?
+- Is the app already using a markdown pipeline built around `remark` / `rehype`?
 
-This is the simplest baseline.
+### 3. Rich Block Behavior
 
-Pros:
-- small mental model
-- semantic HTML output
-- styling-agnostic
-- easy to explain in an interview
+Mermaid, syntax highlighting, tables, math, and raw HTML usually need explicit decisions.
 
-Cons:
-- not designed for incomplete markdown streams
-- partial formatting often waits until the block becomes valid
-- fenced blocks, links, and Mermaid are rough during streaming
+Mermaid in particular should be treated as a separate concern from plain markdown streaming.
 
-When to choose it:
-- you want the cleanest baseline
-- you want to own the streaming behavior yourself
-- you care more about semantic rendering than built-in streaming UX
+### 4. Security / Trust Model
 
-### 2. `react-markdown` + `remend`
+The right implementation depends on who produced the content:
 
-This is the main middle ground used in this repo.
+- trusted internal content
+- AI-generated content
+- untrusted user-generated content
 
-`remend` repairs some incomplete markdown before it reaches `react-markdown`.
+Read next:
+- `docs/security.md`
 
-Pros:
-- keeps `react-markdown` as the renderer
-- improves streaming behavior for incomplete emphasis, links, inline code, and similar syntax
-- still keeps styling under your control
+### 5. UX During Failure Or Incompleteness
 
-Cons:
-- it is still a preprocessor layered on top of a non-streaming-first renderer
-- it does not fully solve fenced block problems by itself
-- Mermaid still needs special-case handling
+For incomplete or invalid streamed content, you usually need to choose one of these behaviors:
 
-When to choose it:
-- you like `react-markdown`
-- you want a small incremental improvement rather than a full renderer switch
-- you want a solution that is still easy to reason about in an interview
+- repair the markdown
+- defer rendering until the block is complete
+- show a placeholder
+- keep the previous valid render
+- surface an error immediately
 
-### 3. `react-markdown` + manual remending logic
+### 6. Animation And Presentation
 
-Instead of using `remend`, you can write your own repair logic for incomplete markdown.
+Streaming markdown is not only about correctness.
 
-Relevant reference:
-- https://github.com/orgs/remarkjs/discussions/1332#discussioncomment-12211812
+The product may also care about:
 
-Pros:
-- zero dependency on `remend`
-- full control over exactly which streaming cases you support
-- easier to justify if the interviewer wants to see custom reasoning rather than package selection
+- progressive reveal
+- reduced visual jumpiness
+- renderer-aware transitions
+- an AI-like streamed presentation style
 
-Cons:
-- easy to underestimate edge cases
-- likely to grow into ad hoc parser logic
-- harder to maintain than a focused library once requirements expand
+`streamdown` has a stronger built-in story here.
 
-When to choose it:
-- the exercise explicitly rewards building the logic yourself
-- you only need to support a narrow subset of markdown
-- you want to demonstrate tradeoff thinking more than library integration
+With `react-markdown`, animation usually needs to be implemented separately at the stream state or UI layer.
 
-### 4. `streamdown`
+## Reference Docs
 
-`streamdown` is purpose-built for streamed markdown.
+Local docs:
+- `docs/react-markdown.md`
+- `docs/streamdown.md`
+- `docs/security.md`
 
-Pros:
-- better handling of incomplete markdown out of the box
-- streaming-oriented behavior is the default rather than an add-on
-- integrates well with `remend`-style repair and Mermaid plugins
-
-Cons:
-- more opinionated
-- default presentation is coupled to Tailwind utility classes for full styling fidelity
-- larger dependency and behavior surface area than `react-markdown`
-
-When to choose it:
-- streaming UX is the primary requirement
-- you want a specialized renderer instead of assembling the pieces yourself
-- you are comfortable with the styling/runtime tradeoffs
-
-## Mermaid-Specific Tradeoffs
-
-Mermaid is its own problem.
-
-Even if text markdown is partially recoverable, partial Mermaid often is not.
-
-The main options are:
-
-### A. Render Mermaid immediately and catch failures
-
-Pros:
-- minimal logic
-- starts rendering as early as possible
-
-Cons:
-- lots of churn while the diagram is still incomplete
-- can feel jumpy
-- error handling becomes part of the normal streaming path
-
-### B. Keep the previous valid SVG on failure
-
-Pros:
-- visually stable
-- avoids flashes and crashes
-
-Cons:
-- the diagram can become stale relative to the current text
-- users may think they are looking at the latest diagram state when they are not
-
-### C. Show a placeholder until the Mermaid block is complete
-
-This is the direction currently explored here.
-
-Pros:
-- clear mental model
-- avoids stale diagrams
-- reduces render churn
-
-Cons:
-- requires block-completeness detection
-- users do not see progressive Mermaid output
-
-## How I Would Discuss This In An Interview
-
-If I were narrating this exercise live, I would usually frame it like this:
-
-1. Start with the smallest correct baseline.
-2. Separate complete-markdown rendering from streaming-markdown rendering.
-3. Decide whether the goal is semantic correctness or best-effort live UX.
-4. Treat Mermaid as a special case instead of pretending it behaves like plain markdown.
-5. Prefer explicit fallback states over invisible failure.
-
-That leads naturally to a few implementation tiers:
-
-### Tier 1
-
-- `react-markdown`
-- no repair logic
-- no special Mermaid handling
-
-Good for showing the baseline and its limits.
-
-### Tier 2
-
-- `react-markdown`
-- `remend` or manual repair logic
-- Mermaid fallback behavior
-
-Good for showing practical problem-solving without fully changing renderers.
-
-### Tier 3
-
-- `streamdown`
-- Mermaid plugin
-- renderer-specific fallback controls
-
-Good for showing what a streaming-first stack buys you, and what it costs.
-
-## Current Experiment Setup In This Repo
-
-This repo intentionally keeps both renderers visible so you can discuss:
-
-- output fidelity
-- streaming behavior
-- Mermaid handling
-- library ergonomics
-- styling constraints
-
-The `react-markdown` side currently exposes toggles for:
-
-- `remend`
-- Mermaid catch rendering
-- Mermaid placeholder fallback
-
-That makes it easy to show not just one answer, but the tradeoffs between several valid answers.
+Upstream docs:
+- `react-markdown`: https://github.com/remarkjs/react-markdown
+- `streamdown`: https://streamdown.ai/
+- `remend`: https://www.npmjs.com/package/remend
+- incomplete stream patterns: https://streamdown.ai/docs/termination#supported-incomplete-patterns
+- manual repair discussion: https://github.com/orgs/remarkjs/discussions/1332#discussioncomment-12211812
+- `rehype-sanitize`: https://github.com/rehypejs/rehype-sanitize
+- `remark-gfm`: https://github.com/remarkjs/remark-gfm
+- `rehype-raw`: https://github.com/rehypejs/rehype-raw
 
 ## Running Locally
 
@@ -232,15 +126,3 @@ Build:
 ```bash
 npm run build
 ```
-
-## Bottom Line
-
-If the interview goal is simplicity, start with `react-markdown`.
-
-If the interview goal is realistic streaming UX, `react-markdown` usually needs help from either:
-
-- `remend`
-- manual repair logic
-- Mermaid-specific fallback handling
-
-If the interview goal is to optimize for streamed markdown as a first-class use case, `streamdown` is the stronger candidate, but it comes with more opinionated behavior and integration constraints.
